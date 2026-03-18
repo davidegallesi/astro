@@ -20,24 +20,33 @@ function formatTime(date: Date) {
   });
 }
 
-const recent = thoughts.slice(0, 5);
-
 const rendered = await Promise.all(
-  recent.map(async (thought) => {
+  thoughts.map(async (thought) => {
     const { Content } = await render(thought);
     return { thought, Content };
   })
 );
+
+const years = [...new Set(thoughts.map((t) => t.data.date.getFullYear()))].sort((a, b) => b - a);
 ---
 
-<Base>
+<Base title="archivio — pensieri">
   <header>
     <h1><a href="/">pensieri</a></h1>
+    <p class="subtitle">archivio</p>
   </header>
+
+  <div class="filter">
+    <label for="year-select">anno</label>
+    <select id="year-select">
+      <option value="tutti">tutti</option>
+      {years.map((y) => <option value={String(y)}>{y}</option>)}
+    </select>
+  </div>
 
   <main>
     {rendered.map(({ thought, Content }) => (
-      <article>
+      <article data-year={thought.data.date.getFullYear()}>
         <time datetime={thought.data.date.toISOString()}>
           <span class="date">{formatDate(thought.data.date)}</span>
           <span class="time">{formatTime(thought.data.date)}</span>
@@ -47,20 +56,24 @@ const rendered = await Promise.all(
         </div>
       </article>
     ))}
-
-    {thoughts.length === 0 && (
-      <p class="empty">nessun pensiero ancora.</p>
-    )}
   </main>
-
-  <footer>
-    <a href="/archivio">archivio →</a>
-  </footer>
 </Base>
+
+<script>
+  const select = document.getElementById('year-select') as HTMLSelectElement;
+  const articles = document.querySelectorAll<HTMLElement>('article[data-year]');
+
+  select.addEventListener('change', () => {
+    const selected = select.value;
+    articles.forEach((article) => {
+      article.hidden = selected !== 'tutti' && article.dataset.year !== selected;
+    });
+  });
+</script>
 
 <style>
   header {
-    margin-bottom: 3rem;
+    margin-bottom: 2rem;
     border-bottom: 1px solid var(--border);
     padding-bottom: 1.5rem;
   }
@@ -79,6 +92,37 @@ const rendered = await Promise.all(
 
   h1 a:hover {
     color: var(--text);
+  }
+
+  .subtitle {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--muted);
+    opacity: 0.6;
+    margin-top: 0.25rem;
+  }
+
+  .filter {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+  }
+
+  .filter label {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .filter select {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
   }
 
   article {
@@ -126,27 +170,5 @@ const rendered = await Promise.all(
   .body :global(a) {
     text-decoration: underline;
     text-underline-offset: 3px;
-  }
-
-  .empty {
-    color: var(--muted);
-    font-style: italic;
-    font-size: 0.9rem;
-  }
-
-  footer {
-    margin-top: 2.5rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--border);
-  }
-
-  footer a {
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
-    color: var(--muted);
-  }
-
-  footer a:hover {
-    color: var(--text);
   }
 </style>
