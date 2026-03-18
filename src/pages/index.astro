@@ -32,7 +32,7 @@ const rendered = await Promise.all(
 
 <Base>
   <header>
-    <h1><a href="/">pensieri</a></h1>
+    <h1><a href={import.meta.env.BASE_URL}>pensieri</a></h1>
   </header>
 
   <main>
@@ -54,7 +54,7 @@ const rendered = await Promise.all(
   </main>
 
   <footer>
-    <a href="/archivio">archivio →</a>
+    <a href={`${import.meta.env.BASE_URL}/archivio`}>archivio →</a>
   </footer>
 </Base>
 
