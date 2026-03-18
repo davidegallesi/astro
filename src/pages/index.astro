@@ -1,17 +1,122 @@
 ---
+import { getCollection, render } from 'astro:content';
+import Base from '../layouts/Base.astro';
 
+const thoughts = await getCollection('thoughts');
+thoughts.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+
+function formatDate(date: Date) {
+  return date.toLocaleDateString('it-IT', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function formatTime(date: Date) {
+  return date.toLocaleTimeString('it-IT', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+const rendered = await Promise.all(
+  thoughts.map(async (thought) => {
+    const { Content } = await render(thought);
+    return { thought, Content };
+  })
+);
 ---
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
-</html>
+<Base>
+  <header>
+    <h1>pensieri</h1>
+  </header>
+
+  <main>
+    {rendered.map(({ thought, Content }) => (
+      <article>
+        <time datetime={thought.data.date.toISOString()}>
+          <span class="date">{formatDate(thought.data.date)}</span>
+          <span class="time">{formatTime(thought.data.date)}</span>
+        </time>
+        <div class="body">
+          <Content />
+        </div>
+      </article>
+    ))}
+
+    {thoughts.length === 0 && (
+      <p class="empty">nessun pensiero ancora.</p>
+    )}
+  </main>
+</Base>
+
+<style>
+  header {
+    margin-bottom: 3rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1.5rem;
+  }
+
+  h1 {
+    font-size: 1rem;
+    font-weight: normal;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    font-family: var(--font-mono);
+  }
+
+  article {
+    padding: 1.75rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  article:last-of-type {
+    border-bottom: none;
+  }
+
+  time {
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+    margin-bottom: 0.75rem;
+  }
+
+  .date {
+    font-size: 0.8rem;
+    font-family: var(--font-mono);
+    color: var(--muted);
+  }
+
+  .time {
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    color: var(--muted);
+    opacity: 0.6;
+  }
+
+  .body {
+    font-size: 1rem;
+    line-height: 1.7;
+  }
+
+  .body :global(p) {
+    margin-bottom: 0.75em;
+  }
+
+  .body :global(p:last-child) {
+    margin-bottom: 0;
+  }
+
+  .body :global(a) {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .empty {
+    color: var(--muted);
+    font-style: italic;
+    font-size: 0.9rem;
+  }
+</style>
