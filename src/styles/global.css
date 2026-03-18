@@ -10,8 +10,8 @@
   --muted: #888;
   --border: #e5e5e5;
   --max-width: 600px;
-  --font: 'Georgia', serif;
-  --font-mono: 'Menlo', 'Monaco', monospace;
+  --font: 'Helvetica Neue', 'Helvetica', Arial, sans-serif;
+  --font-mono: 'Helvetica Neue', 'Helvetica', Arial, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
