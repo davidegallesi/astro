@@ -2,8 +2,8 @@
 import { getCollection, render } from 'astro:content';
 import Base from '../layouts/Base.astro';
 
-const thoughts = await getCollection('thoughts');
-thoughts.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+const allPosts = await getCollection('stream', ({ data }) => data.published !== false);
+allPosts.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
 
 function formatDate(date: Date) {
   return date.toLocaleDateString('it-IT', {
@@ -21,108 +21,189 @@ function formatTime(date: Date) {
 }
 
 const rendered = await Promise.all(
-  thoughts.map(async (thought) => {
-    const { Content } = await render(thought);
-    return { thought, Content };
+  allPosts.map(async (post) => {
+    const { Content } = await render(post);
+    return { post, Content };
   })
 );
 
-const years = [...new Set(thoughts.map((t) => t.data.date.getFullYear()))].sort((a, b) => b - a);
+const years = [...new Set(allPosts.map((p) => p.data.date.getFullYear()))].sort((a, b) => b - a);
+const types = ['note', 'link', 'quote', 'image'] as const;
+const typeLabels: Record<string, string> = {
+  note: 'note',
+  link: 'link',
+  quote: 'citazioni',
+  image: 'immagini',
+};
+
+const base = import.meta.env.BASE_URL;
 ---
 
-<Base title="archivio — pensieri">
-  <header>
-    <h1><a href={import.meta.env.BASE_URL}>pensieri</a></h1>
-    <p class="subtitle">archivio</p>
-  </header>
+<Base title="archivio — marginalia" description="tutto l'archivio dello stream">
+  <div class="page-title">
+    <h1>archivio</h1>
+    <span class="count">{allPosts.length} post</span>
+  </div>
 
-  <div class="filter">
-    <label for="year-select">anno</label>
-    <select id="year-select">
-      <option value="tutti">tutti</option>
+  <div class="filters">
+    <div class="type-filters">
+      <button class="filter-btn active" data-type="tutti">tutti</button>
+      {types.map((t) => (
+        <button class="filter-btn" data-type={t}>{typeLabels[t]}</button>
+      ))}
+    </div>
+    <select id="year-select" aria-label="filtra per anno">
+      <option value="tutti">tutti gli anni</option>
       {years.map((y) => <option value={String(y)}>{y}</option>)}
     </select>
   </div>
 
   <main>
-    {rendered.map(({ thought, Content }) => (
-      <article data-year={thought.data.date.getFullYear()}>
-        <time datetime={thought.data.date.toISOString()}>
-          <span class="date">{formatDate(thought.data.date)}</span>
-          <span class="time">{formatTime(thought.data.date)}</span>
-        </time>
-        <div class="body">
-          <Content />
+    {rendered.map(({ post, Content }) => (
+      <article
+        class={`post type-${post.data.type}`}
+        data-type={post.data.type}
+        data-year={post.data.date.getFullYear()}
+      >
+        <div class="meta">
+          <a href={`${base}${post.id}`} class="timestamp">
+            <time datetime={post.data.date.toISOString()}>
+              <span class="date">{formatDate(post.data.date)}</span>
+              <span class="time">{formatTime(post.data.date)}</span>
+            </time>
+          </a>
+          <span class="type-badge">{post.data.type}</span>
         </div>
+
+        {post.data.type === 'link' && post.data.url && (
+          <div class="link-title">
+            <a href={post.data.url} target="_blank" rel="noopener noreferrer">
+              {post.data.linkTitle || post.data.url}
+            </a>
+          </div>
+        )}
+
+        {post.data.type === 'image' && post.data.image && (
+          <figure class="polaroid">
+            <img src={post.data.image} alt={post.data.imageAlt || ''} loading="lazy" />
+            {post.data.imageAlt && <figcaption>{post.data.imageAlt}</figcaption>}
+          </figure>
+        )}
+
+        {post.data.type === 'quote' ? (
+          <blockquote class="post-body">
+            <Content />
+            {post.data.author && <cite>— {post.data.author}</cite>}
+          </blockquote>
+        ) : (
+          <div class="post-body">
+            <Content />
+          </div>
+        )}
       </article>
     ))}
   </main>
 </Base>
 
 <script>
-  const select = document.getElementById('year-select') as HTMLSelectElement;
-  const articles = document.querySelectorAll<HTMLElement>('article[data-year]');
+  const yearSelect = document.getElementById('year-select') as HTMLSelectElement;
+  const filterBtns = document.querySelectorAll<HTMLButtonElement>('.filter-btn');
+  const articles = document.querySelectorAll<HTMLElement>('article[data-type]');
 
-  select.addEventListener('change', () => {
-    const selected = select.value;
+  let activeType = 'tutti';
+  let activeYear = 'tutti';
+
+  function applyFilters() {
     articles.forEach((article) => {
-      article.hidden = selected !== 'tutti' && article.dataset.year !== selected;
+      const matchType = activeType === 'tutti' || article.dataset.type === activeType;
+      const matchYear = activeYear === 'tutti' || article.dataset.year === activeYear;
+      article.hidden = !(matchType && matchYear);
     });
+  }
+
+  filterBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      filterBtns.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeType = btn.dataset.type || 'tutti';
+      applyFilters();
+    });
+  });
+
+  yearSelect.addEventListener('change', () => {
+    activeYear = yearSelect.value;
+    applyFilters();
   });
 </script>
 
 <style>
-  header {
-    margin-bottom: 2rem;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 1.5rem;
+  .page-title {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 1.75rem;
   }
 
   h1 {
     font-size: 1rem;
-    font-weight: normal;
-    letter-spacing: 0.05em;
-    color: var(--muted);
-    font-family: var(--font-mono);
-  }
-
-  h1 a {
-    color: inherit;
-  }
-
-  h1 a:hover {
+    font-weight: 500;
     color: var(--text);
   }
 
-  .subtitle {
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
+  .count {
+    font-size: 0.78rem;
     color: var(--muted);
-    opacity: 0.6;
-    margin-top: 0.25rem;
   }
 
-  .filter {
+  .filters {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.75rem;
     margin-bottom: 2rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--border);
   }
 
-  .filter label {
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
+  .type-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    flex: 1;
+  }
+
+  .filter-btn {
+    background: none;
+    border: 1px solid var(--border);
     color: var(--muted);
+    font-size: 0.78rem;
+    font-family: inherit;
+    padding: 0.2rem 0.6rem;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.1s;
   }
 
-  .filter select {
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
+  .filter-btn:hover {
+    color: var(--text);
+    border-color: var(--text);
+  }
+
+  .filter-btn.active {
+    background: var(--text);
+    color: var(--bg);
+    border-color: var(--text);
+  }
+
+  select {
+    font-family: inherit;
+    font-size: 0.78rem;
     color: var(--text);
     background: var(--bg);
     border: 1px solid var(--border);
-    padding: 0.25rem 0.5rem;
+    padding: 0.2rem 0.5rem;
     cursor: pointer;
+    border-radius: 2px;
   }
 
   article {
@@ -134,41 +215,97 @@ const years = [...new Set(thoughts.map((t) => t.data.date.getFullYear()))].sort(
     border-bottom: none;
   }
 
-  time {
+  .meta {
     display: flex;
-    gap: 0.75rem;
     align-items: baseline;
+    gap: 0.75rem;
     margin-bottom: 0.75rem;
+  }
+
+  .timestamp {
+    display: flex;
+    gap: 0.6rem;
+    align-items: baseline;
   }
 
   .date {
     font-size: 0.72rem;
-    font-family: var(--font-mono);
     color: var(--muted);
   }
 
   .time {
     font-size: 0.68rem;
-    font-family: var(--font-mono);
     color: var(--muted);
     opacity: 0.6;
   }
 
-  .body {
+  .type-badge {
+    font-size: 0.65rem;
+    color: var(--muted);
+    opacity: 0.5;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .link-title {
+    margin-bottom: 0.75rem;
     font-size: 1rem;
-    line-height: 1.7;
+    font-weight: 500;
   }
 
-  .body :global(p) {
-    margin-bottom: 0.75em;
+  .link-title a {
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 
-  .body :global(p:last-child) {
+  .link-title a::after {
+    content: " ↗";
+    font-size: 0.8em;
+    opacity: 0.6;
+    font-weight: 400;
+  }
+
+  .polaroid {
+    margin-bottom: 0.75rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 0.75rem 0.75rem 0.5rem;
+    display: inline-block;
+    max-width: 100%;
+  }
+
+  .polaroid img {
+    display: block;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .polaroid figcaption {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 0.4rem;
+    font-style: italic;
+  }
+
+  blockquote.post-body {
+    border-left: 2px solid var(--border);
+    padding-left: 1rem;
+    font-style: italic;
+  }
+
+  blockquote.post-body :global(p) {
+    margin-bottom: 0.5em;
+  }
+
+  blockquote.post-body :global(p:last-child) {
     margin-bottom: 0;
   }
 
-  .body :global(a) {
-    text-decoration: underline;
-    text-underline-offset: 3px;
+  cite {
+    display: block;
+    font-size: 0.82rem;
+    font-style: normal;
+    color: var(--muted);
+    margin-top: 0.5rem;
   }
 </style>

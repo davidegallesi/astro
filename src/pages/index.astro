@@ -2,8 +2,12 @@
 import { getCollection, render } from 'astro:content';
 import Base from '../layouts/Base.astro';
 
-const thoughts = await getCollection('thoughts');
-thoughts.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+const allPosts = await getCollection('stream', ({ data }) => data.published !== false);
+allPosts.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+
+const twoMonthsAgo = new Date();
+twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+const posts = allPosts.filter((p) => p.data.date >= twoMonthsAgo);
 
 function formatDate(date: Date) {
   return date.toLocaleDateString('it-IT', {
@@ -20,65 +24,74 @@ function formatTime(date: Date) {
   });
 }
 
-const recent = thoughts.slice(0, 5);
-
 const rendered = await Promise.all(
-  recent.map(async (thought) => {
-    const { Content } = await render(thought);
-    return { thought, Content };
+  posts.map(async (post) => {
+    const { Content } = await render(post);
+    return { post, Content };
   })
 );
+
+const base = import.meta.env.BASE_URL;
 ---
 
 <Base>
-  <header>
-    <h1><a href={import.meta.env.BASE_URL}>pensieri</a></h1>
-  </header>
-
   <main>
-    {rendered.map(({ thought, Content }) => (
-      <article>
-        <time datetime={thought.data.date.toISOString()}>
-          <span class="date">{formatDate(thought.data.date)}</span>
-          <span class="time">{formatTime(thought.data.date)}</span>
-        </time>
-        <div class="body">
-          <Content />
+    {rendered.length === 0 && (
+      <p class="empty">nessun contenuto negli ultimi due mesi. <a href={base + 'archivio'}>archivio →</a></p>
+    )}
+
+    {rendered.map(({ post, Content }) => (
+      <article class={`post type-${post.data.type}`}>
+        <div class="meta">
+          <a href={`${base}${post.id}`} class="timestamp">
+            <time datetime={post.data.date.toISOString()}>
+              <span class="date">{formatDate(post.data.date)}</span>
+              <span class="time">{formatTime(post.data.date)}</span>
+            </time>
+          </a>
+          <span class="type-badge">{post.data.type}</span>
         </div>
+
+        {post.data.type === 'link' && post.data.url && (
+          <div class="link-title">
+            <a href={post.data.url} target="_blank" rel="noopener noreferrer">
+              {post.data.linkTitle || post.data.url}
+            </a>
+          </div>
+        )}
+
+        {post.data.type === 'image' && post.data.image && (
+          <figure class="polaroid">
+            <img src={post.data.image} alt={post.data.imageAlt || ''} loading="lazy" />
+            {post.data.imageAlt && <figcaption>{post.data.imageAlt}</figcaption>}
+          </figure>
+        )}
+
+        {post.data.type === 'quote' ? (
+          <blockquote class="post-body">
+            <Content />
+            {post.data.author && <cite>— {post.data.author}</cite>}
+          </blockquote>
+        ) : (
+          <div class="post-body">
+            <Content />
+          </div>
+        )}
       </article>
     ))}
-
-    {thoughts.length === 0 && (
-      <p class="empty">nessun pensiero ancora.</p>
-    )}
   </main>
 
-  <footer>
-    <a href={`${import.meta.env.BASE_URL}/archivio`}>archivio →</a>
-  </footer>
+  {allPosts.length > posts.length && (
+    <footer>
+      <a href={base + 'archivio'}>tutto l'archivio ({allPosts.length}) →</a>
+    </footer>
+  )}
 </Base>
 
 <style>
-  header {
-    margin-bottom: 3rem;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 1.5rem;
-  }
-
-  h1 {
-    font-size: 1rem;
-    font-weight: normal;
-    letter-spacing: 0.05em;
-    color: var(--muted);
-    font-family: var(--font-mono);
-  }
-
-  h1 a {
-    color: inherit;
-  }
-
-  h1 a:hover {
-    color: var(--text);
+  main {
+    display: flex;
+    flex-direction: column;
   }
 
   article {
@@ -90,60 +103,127 @@ const rendered = await Promise.all(
     border-bottom: none;
   }
 
-  time {
+  .meta {
     display: flex;
-    gap: 0.75rem;
     align-items: baseline;
+    gap: 0.75rem;
     margin-bottom: 0.75rem;
+  }
+
+  .timestamp {
+    display: flex;
+    gap: 0.6rem;
+    align-items: baseline;
   }
 
   .date {
     font-size: 0.72rem;
-    font-family: var(--font-mono);
     color: var(--muted);
   }
 
   .time {
     font-size: 0.68rem;
-    font-family: var(--font-mono);
     color: var(--muted);
     opacity: 0.6;
   }
 
-  .body {
+  .type-badge {
+    font-size: 0.65rem;
+    color: var(--muted);
+    opacity: 0.5;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .link-title {
+    margin-bottom: 0.75rem;
     font-size: 1rem;
-    line-height: 1.7;
+    font-weight: 500;
   }
 
-  .body :global(p) {
-    margin-bottom: 0.75em;
-  }
-
-  .body :global(p:last-child) {
-    margin-bottom: 0;
-  }
-
-  .body :global(a) {
+  .link-title a {
     text-decoration: underline;
     text-underline-offset: 3px;
   }
 
+  .link-title a::after {
+    content: " ↗";
+    font-size: 0.8em;
+    opacity: 0.6;
+    font-weight: 400;
+  }
+
+  .link-title a:hover {
+    opacity: 0.75;
+  }
+
+  .polaroid {
+    margin-bottom: 0.75rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 0.75rem 0.75rem 0.5rem;
+    display: inline-block;
+    max-width: 100%;
+  }
+
+  .polaroid img {
+    display: block;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .polaroid figcaption {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 0.4rem;
+    font-style: italic;
+  }
+
+  blockquote.post-body {
+    border-left: 2px solid var(--border);
+    padding-left: 1rem;
+    font-style: italic;
+    color: var(--text);
+  }
+
+  blockquote.post-body :global(p) {
+    margin-bottom: 0.5em;
+  }
+
+  blockquote.post-body :global(p:last-child) {
+    margin-bottom: 0;
+  }
+
+  cite {
+    display: block;
+    font-size: 0.82rem;
+    font-style: normal;
+    color: var(--muted);
+    margin-top: 0.5rem;
+  }
+
   .empty {
     color: var(--muted);
-    font-style: italic;
     font-size: 0.9rem;
+    font-style: italic;
+    padding: 1rem 0;
+  }
+
+  .empty a {
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 
   footer {
-    margin-top: 2.5rem;
-    padding-top: 1.5rem;
+    margin-top: 2rem;
+    padding-top: 1.25rem;
     border-top: 1px solid var(--border);
   }
 
   footer a {
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     color: var(--muted);
+    transition: color 0.1s;
   }
 
   footer a:hover {

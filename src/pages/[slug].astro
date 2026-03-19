@@ -1,0 +1,256 @@
+---
+import { getCollection, render } from 'astro:content';
+import Base from '../layouts/Base.astro';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('stream', ({ data }) => data.published !== false);
+  return posts.map((post) => ({
+    params: { slug: post.id },
+    props: { post },
+  }));
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+
+const allPosts = await getCollection('stream', ({ data }) => data.published !== false);
+
+// Find backlinks: posts that reference [[./this-slug]] in their body
+const slug = post.id;
+const backlinks = allPosts.filter((p) => {
+  if (p.id === slug) return false;
+  return p.body?.includes(`[[./${slug}]]`) || p.body?.includes(`[[./${slug}|`);
+});
+
+function formatDate(date: Date) {
+  return date.toLocaleDateString('it-IT', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function formatTime(date: Date) {
+  return date.toLocaleTimeString('it-IT', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+const base = import.meta.env.BASE_URL;
+
+const pageTitle = post.data.type === 'link' && post.data.linkTitle
+  ? `${post.data.linkTitle} — marginalia`
+  : `${formatDate(post.data.date)} — marginalia`;
+---
+
+<Base title={pageTitle}>
+  <article class={`post type-${post.data.type}`}>
+    <div class="meta">
+      <time datetime={post.data.date.toISOString()}>
+        <span class="date">{formatDate(post.data.date)}</span>
+        <span class="time">{formatTime(post.data.date)}</span>
+      </time>
+      <span class="type-badge">{post.data.type}</span>
+    </div>
+
+    {post.data.type === 'link' && post.data.url && (
+      <div class="link-title">
+        <a href={post.data.url} target="_blank" rel="noopener noreferrer">
+          {post.data.linkTitle || post.data.url}
+        </a>
+      </div>
+    )}
+
+    {post.data.type === 'image' && post.data.image && (
+      <figure class="polaroid">
+        <img src={post.data.image} alt={post.data.imageAlt || ''} />
+        {post.data.imageAlt && <figcaption>{post.data.imageAlt}</figcaption>}
+      </figure>
+    )}
+
+    {post.data.type === 'quote' ? (
+      <blockquote class="post-body">
+        <Content />
+        {post.data.author && <cite>— {post.data.author}</cite>}
+      </blockquote>
+    ) : (
+      <div class="post-body">
+        <Content />
+      </div>
+    )}
+  </article>
+
+  {backlinks.length > 0 && (
+    <aside class="backlinks">
+      <h2>citato in</h2>
+      <ul>
+        {backlinks.map((bl) => (
+          <li>
+            <a href={`${base}${bl.id}`}>
+              <time datetime={bl.data.date.toISOString()}>
+                {formatDate(bl.data.date)}
+              </time>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  )}
+
+  <nav class="post-nav">
+    <a href={base} class="back">← stream</a>
+    <a href={`${base}archivio`} class="archive">archivio</a>
+  </nav>
+</Base>
+
+<style>
+  article {
+    padding: 0 0 2rem;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .meta {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+
+  time {
+    display: flex;
+    gap: 0.6rem;
+    align-items: baseline;
+  }
+
+  .date {
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+
+  .time {
+    font-size: 0.68rem;
+    color: var(--muted);
+    opacity: 0.6;
+  }
+
+  .type-badge {
+    font-size: 0.65rem;
+    color: var(--muted);
+    opacity: 0.5;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .link-title {
+    margin-bottom: 1rem;
+    font-size: 1.05rem;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  .link-title a {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .link-title a::after {
+    content: " ↗";
+    font-size: 0.8em;
+    opacity: 0.6;
+    font-weight: 400;
+  }
+
+  .polaroid {
+    margin-bottom: 1rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 0.75rem 0.75rem 0.5rem;
+    display: inline-block;
+    max-width: 100%;
+  }
+
+  .polaroid img {
+    display: block;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .polaroid figcaption {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 0.4rem;
+    font-style: italic;
+  }
+
+  blockquote.post-body {
+    border-left: 2px solid var(--border);
+    padding-left: 1rem;
+    font-style: italic;
+  }
+
+  blockquote.post-body :global(p) {
+    margin-bottom: 0.5em;
+  }
+
+  blockquote.post-body :global(p:last-child) {
+    margin-bottom: 0;
+  }
+
+  cite {
+    display: block;
+    font-size: 0.82rem;
+    font-style: normal;
+    color: var(--muted);
+    margin-top: 0.5rem;
+  }
+
+  .backlinks {
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background: var(--border);
+    border-radius: 3px;
+  }
+
+  .backlinks h2 {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.5rem;
+  }
+
+  .backlinks ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .backlinks li {
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .backlinks a {
+    color: var(--text);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .post-nav {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+
+  .post-nav a {
+    transition: color 0.1s;
+  }
+
+  .post-nav a:hover {
+    color: var(--text);
+  }
+</style>
